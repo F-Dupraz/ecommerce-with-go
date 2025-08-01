@@ -1,0 +1,44 @@
+# Binarios compilados
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Archivos de test
+*.test
+
+# Archivos de cobertura
+*.out
+*.prof
+
+# Binario principal (ajustar nombre según tu proyecto)
+main
+server
+app
+
+# Dependencias de vendor (si usas vendoring)
+vendor/
+
+# Variables de entorno
+.env
+.env.local
+.env.production
+
+# Logs
+*.log
+logs/
+
+# Directorios de IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Archivos temporales
+tmp/
+temp/
