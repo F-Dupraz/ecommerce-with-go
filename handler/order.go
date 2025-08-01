@@ -11,7 +11,7 @@ func (o *Order) Create(w http.ResponseWriter, r *http.Request) {
   fmt.Println("Create an order")
 }
 
-func (o *Order) List(w http.ResponseWriter, r *http.Request) {
+func (o *Order) ListAllOrders(w http.ResponseWriter, r *http.Request) {
   fmt.Println("List all orders")
 }
 
