@@ -1,23 +1,43 @@
 package application
 
 import (
-  "net/http"
+  // "database/sql"
 
   "github.com/go-chi/chi/v5"
   "github.com/go-chi/chi/v5/middleware"
+  "github.com/go-playground/validator/v10"
 
   "github.com/F-Dupraz/ecommerce-with-go/handler"
+  "github.com/F-Dupraz/ecommerce-with-go/dto"
 )
 
 func loadRoutes() *chi.Mux {
   router := chi.NewRouter()
 
   router.Use(middleware.Logger)
-  
-  router.Route("/orders", loadOrderRoutes)
-  router.Route("/users", loadUsersRoutes)
+  router.Use(middleware.Recoverer) // Agregá este, es importante
+  router.Use(middleware.RequestID)  // Para trackear requests
+
+  validator, err := dto.NewValidator()
+  if err != nil {
+    panic("Failed to initialize validator: " + err.Error())
+  }
+
+  router.Route("/api/v1", func(r chi.Router) {
+    r.Route("/users", func(r chi.Router) {
+      loadUsersRoutes(r, validator)
+    })
+  })
 
   return router
+}
+
+func loadUsersRoutes(router chi.Router, validator *validator.Validate) {
+  // mockUserService := &MockUserService{}
+
+  userHandler := handler.NewUserHandler(mockUserService, validator)
+
+  userHandler.RegisterRoutes(router)
 }
 
 func loadOrderRoutes(router chi.Router) {
@@ -30,12 +50,13 @@ func loadOrderRoutes(router chi.Router) {
   router.Delete("/{id}", orderHandler.DeleteByID)
 }
 
-func loadUsersRoutes(router chi.Router) {
-  userHandler := &handler.User{}
+func loadProductRoutes(router chi.Router) {
+  productHandler := &handler.Product{}
 
-  router.Get("/", userHandler.ListAllUsers)
-  router.Get("/{id}", userHandler.GetByID)
-  router.Post("/", userHandler.Create)
-  router.Put("/{id}", userHandler.UpdateByID)
-  router.Delete("/{id}", userHandler.DeleteByID)
+  router.Get("/", productHandler.ListAllOrders)
+  router.Get("/{id}", productHandler.GetByID)
+  router.Post("/", productHandler.Create)
+  router.Put("/{id}", productHandler.UpdateByID)
+  router.Delete("/{id}", productHandler.DeleteByID)
 }
+
