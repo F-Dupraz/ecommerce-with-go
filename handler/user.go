@@ -2,7 +2,6 @@ package handler
 
 import (
   "context"
-  "fmt"
   "net/http"
   "encoding/json"
 
@@ -66,17 +65,93 @@ func (u *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u *UserHandler) GetUserByEmail(w http.ResponseWriter, r *http.Request) {
-  fmt.Println("List all users")
+  email := r.URL.Query().Get("email")
+
+  req := dto.GetUserByEmailRequest{
+	Email: email,
+  }
+
+  if err := u.validator.Struct(req); err != nil {
+	validationErrors := dto.FormatValidationErrors(err)
+	u.respondWithError(w, http.StatusUnprocessableEntity, "Validation failed!", validationErrors)
+	return
+  }
+
+  response, err := u.userService.GetUserByEmail(r.Context(), req)
+  if err != nil {
+	u.respondWithError(w, http.StatusInternalServerError, "Failed to get user by email", nil)
+	return
+  }
+
+  u.respondWithSuccess(w, http.StatusOK, response)
 }
 
 func (u *UserHandler) GetUserByID(w http.ResponseWriter, r *http.Request) {
-  fmt.Println("Get a user by ID")
+  id := chi.URLParam(r, "id")
+
+  req := dto.GetUserByIDRequest{
+	ID: id,
+  }
+
+  if err := u.validator.Struct(req); err != nil {
+	validationErrors := dto.FormatValidationErrors(err)
+	u.respondWithError(w, http.StatusUnprocessableEntity, "Validation failed!", validationErrors)
+	return
+  }
+
+  response, err := u.userService.GetUserById(r.Context(), req)
+  if err != nil {
+	u.respondWithError(w, http.StatusInternalServerError, "Failed to get user by id", nil)
+	return
+  }
+
+  u.respondWithSuccess(w, http.StatusOK, response)
 }
 
 func (u *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
-  fmt.Println("Update a user by ID")
+  userId := chi.URLParam(r, "id")
+
+  var req dto.UpdateUserRequest
+
+  if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	u.respondWithError(w, http.StatusBadRequest, "Cannot parse JSON: " + err.Error(), nil)
+	return
+  }
+
+  if err := u.validator.Struct(req); err != nil {
+	validationErrors := dto.FormatValidationErrors(err)
+	u.respondWithError(w, http.StatusUnprocessableEntity, "Validation failed!", validationErrors)
+	return
+  }
+
+  response, err := u.userService.UpdateUser(r.Context(), userId, req)
+  if err != nil {
+	u.respondWithError(w, http.StatusInternalServerError, "Failed to update user by id", nil)
+	return
+  }
+
+  u.respondWithSuccess(w, http.StatusOK, response)
 }
 
 func (u *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
-  fmt.Println("Delete a user by ID")
+  var req dto.DeleteUserRequest
+
+  if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	u.respondWithError(w, http.StatusBadRequest, "Cannot parse JSON: " + err.Error(), nil)
+	return
+  }
+
+  if err := u.validator.Struct(req); err != nil {
+	validationErrors := dto.FormatValidationErrors(err)
+	u.respondWithError(w, http.StatusUnprocessableEntity, "Validation failed!", validationErrors)
+	return
+  }
+
+  response, err := u.userService.DeleteUser(r.Context(), req)
+  if err != nil {
+	u.respondWithError(w, http.StatusInternalServerError, "Failed to delete user", nil)
+	return
+  }
+
+  u.respondWithSuccess(w, http.StatusOK, response)
 }
