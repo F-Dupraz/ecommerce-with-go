@@ -32,92 +32,130 @@ func NewUserRepository(db *pgxpool.Pool) *UserRepository {
 }
 
 func (r *UserRepository) CreateUserAtomic(ctx context.Context, user *model.User) error {
-  tx, err := r.db.Begin(ctx)
-  if err != nil {
-	return err
-  }
-
-  defer tx.Rollback(ctx)
-
-  var existsUsername bool
-  var existsEmail bool
-
-  err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)", user.Username).Scan(&existsUsername)
-  if err != nil {
-	return err
-  }
-
-  if existsUsername {
-	return ErrDuplicateUsername
-  }
-
-  err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)", user.Email).Scan(&existsEmail)
-  if err != nil {
-	return nil
-  }
-
-  if existsEmail {
-	return ErrDuplicateEmail
-  }
-
-  err := tx.QueryRow(ctx, "INSERT INTO users (id, email, username, password, address, city, country) VALUES ($1, $2, $3, $4, $5, $6) RETURNING created_at, updated_at", 
-	user.ID, user.Email, user.Username, user.Password, user.Address, user.Country).Scan(&user.CreatedAt, &user.UpdatedAt)
+  err := r.db.QueryRow(ctx,
+	`INSERT INTO users (id, email, username, password, address, city, country) 
+	VALUES ($1, $2, $3, $4, $5, $6, $7) 
+	RETURNING created_at, updated_at`,
+	user.ID, user.Email, user.Username, user.Password, 
+	user.Address, user.City, user.Country,
+  ).Scan(&user.CreatedAt, &user.UpdatedAt)
 
   if err != nil {
-	return r.translateError(err)
+	return r.translateError(err)  // translateError ya maneja los duplicados
   }
 
-  return tx.Commit(ctx)
-}
-
-func (r *UserRepository) GetByID(ctx context.Context, id string) (*model.User, error) {
-    // TODO: SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL
-    // TODO: Manejar pgx.ErrNoRows → ErrUserNotFound
-    
-  return nil, nil
-}
-
-func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*model.User, error) {
-    // TODO: SELECT * FROM users WHERE email = $1 AND deleted_at IS NULL
-    // TODO: Manejar pgx.ErrNoRows → ErrUserNotFound
-    
-  return nil, nil
-}
-
-func (r *UserRepository) Update(ctx context.Context, id string, user *model.User) error {
-    // TODO: Build dynamic UPDATE query based on non-nil fields
-    // TODO: RETURNING updated_at para actualizar el timestamp en el struct
-    // TODO: Check rows affected
-    
   return nil
 }
 
+func (r *UserRepository) GetByID(ctx context.Context, id string) (*model.User, error) {
+  var user model.User
+  err := r.db.QueryRow(ctx, "SELECT id, email, username, address, city, country, created_at, updated_at FROM users WHERE id = $1 AND deleted_at IS NULL", id).Scan(
+  &user.ID, &user.Email, &user.Username, &user.Address, &user.City, &user.Country, &user.CreatedAt, &user.UpdatedAt)
+
+  if err != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
+	  return nil, ErrUserNotFound
+	}
+
+	return nil, fmt.Errorf("failed to get user by id: %w", err)
+  }
+
+  return &user, nil
+}
+
+func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*model.User, error) {
+  var user model.User
+  err := r.db.QueryRow(ctx, "SELECT id, email, username, address, city, country, created_at, updated_at FROM users WHERE email = $1 AND deleted_at IS NULL", email).Scan(
+  &user.ID, &user.Email, &user.Username, &user.Address, &user.City, &user.Country, &user.CreatedAt, &user.UpdatedAt)
+
+  if err != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
+	  return nil, ErrUserNotFound
+	}
+
+	return nil, fmt.Errorf("failed to get user by id: %w", err)
+  }
+
+  return &user, nil
+}
+
+func (r *UserRepository) Update(ctx context.Context, id string, updates map[string]interface{}) (*model.User, error) {
+  var user model.User
+
+  setClauses := []string{}
+  args := []interface{}{}
+  argID := 1
+
+  for field, value := range updates {
+	setClauses = append(setClauses, fmt.Sprintf("%s = $%d", field, argID))
+	args = append(args, value)
+	argID++
+  }
+
+  setClauses = append(setClauses, fmt.Sprintf("updated_at = $%d", argID))
+  args = append(args, time.Now())
+  argID++
+
+  args = append(args, id)
+
+  query := fmt.Sprintf(
+	"UPDATE users SET %s WHERE id = $%d AND deleted_at IS NULL RETURNING id, email, username, address, city, country, created_at, updated_at",
+	strings.Join(setClauses, ", "),
+	argID,
+  )
+
+  err := r.db.QueryRow(ctx, query).Scan(&user.ID, &user.Email, &user.Username, &user.Address, &user.City, &user.Country, &user.CreatedAt, &user.UpdatedAt)
+  if err != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
+	  return nil, ErrUserNotFound
+	}
+
+	return nil, fmt.Errorf("failed to update user: %w", err)
+  }
+
+  return &user, nil
+}
+
 func (r *UserRepository) Delete(ctx context.Context, id string) (time.Time, error) {
-    // TODO: UPDATE users SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL
-    // TODO: RETURNING deleted_at
-    // TODO: Check rows affected
-    
-  return time.Time{}, nil
+  var userDeletedAt time.Time
+  err := r.db.QueryRow(ctx, "UPDATE users SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING deleted_at", id).Scan(&userDeletedAt)
+  if err != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
+	  return time.Time{}, ErrUserNotFound
+	}
+
+	return time.Time{}, fmt.Errorf("failed to delete user: %w", err)
+  }
+
+  return userDeletedAt, nil
 }
 
 func (r *UserRepository) ExistsByEmail(ctx context.Context, email string) (bool, error) {
-    // TODO: SELECT EXISTS(SELECT 1 FROM users WHERE email = $1 AND deleted_at IS NULL)
-    
-  return false, nil
+  var exists bool
+  err := r.db.QueryRow(ctx, 
+	"SELECT EXISTS(SELECT 1 FROM users WHERE email = $1 AND deleted_at IS NULL)", 
+	email,
+  ).Scan(&exists)
+
+  if err != nil {
+	return false, fmt.Errorf("failed to check email existence: %w", err)
+  }
+
+  return exists, nil
 }
 
 func (r *UserRepository) ExistsByUsername(ctx context.Context, username string) (bool, error) {
-    // TODO: SELECT EXISTS(SELECT 1 FROM users WHERE username = $1 AND deleted_at IS NULL)
-    
-  return false, nil
-}
+  var exists bool
+  err := r.db.QueryRow(ctx, 
+	"SELECT EXISTS(SELECT 1 FROM users WHERE email = $1 AND deleted_at IS NULL)", 
+	email,
+  ).Scan(&exists)
 
-func (r *UserRepository) List(ctx context.Context, limit, offset int) ([]*model.User, int64, error) {
-    // TODO: Query para obtener users paginados
-    // TODO: Query separada para COUNT total
-    // TODO: Retornar slice de users y total count
-    
-  return nil, 0, nil
+  if err != nil {
+	return false, fmt.Errorf("failed to check email existence: %w", err)
+  }
+
+  return exists, nil
 }
 
 func (r *UserRepository) translateError(err error) error {

@@ -1,6 +1,8 @@
 package service
 
 import (
+  "fmt"
+  "time"
   "context"
   "errors"
 
@@ -25,8 +27,10 @@ type UserRepository interface {
   CreateUserAtomic(ctx context.Context, user *model.User) error
   GetByID(ctx context.Context, id string) (*model.User, error)
   GetByEmail(ctx context.Context, email string) (*model.User, error)
-  Update(ctx context.Context, id string, user *model.User) error
+  Update(ctx context.Context, id string, updates map[string]interface{}) (*model.User, error)
   Delete(ctx context.Context, id string) error
+  ExistsByEmail(ctx context.Context, email string) (bool, error)
+  ExistsByUsername(ctx context.Context, username string) (bool, error)
 }
 
 type UserService struct {
@@ -69,97 +73,167 @@ func (s *UserService) CreateUser(ctx context.Context, req dto.CreateUserRequest)
 	return nil, fmt.Errorf("failed to create user: %w", err)
   }
 
-  return &responseUser{
+  return &dto.CreateUserResponse{
 	ID: newUser.ID,
 	User: s.modelToResponse(&newUser),
 	Message: "User created successfully!",
   }, nil
 }
 
-func (s *UserService) GetUserById(ctx context.Context, req dto.GetUserByIDRequest) (*dto.UserResponse, error) {
-    // TODO: Validate UUID format if needed
-    
-    // TODO: Call repo.GetByID with req.ID
-    
-    // TODO: Handle ErrUserNotFound if user doesn't exist
-    
-    // TODO: Convert model.User to dto.UserResponse
-    
-    return nil, nil
+func (s *UserService) GetUserByID(ctx context.Context, req dto.GetUserByIDRequest) (*dto.UserResponse, error) {
+  if err := uuid.Validate(userID); err != nil {
+	return nil, ErrInvalidUserID
+  }
+
+  serId := req.ID
+
+  var user model.User
+
+  user, err := s.repo.GetUserByID(ctx, userID)
+  if err != nil {
+	return nil, ErrInvalidUserID
+  }
+
+  return &dto.UserResponse{
+	ID: user.ID,
+	Username: user.Username,
+	Email: user.Email,
+	Address: user.Email,
+	City: user.City,
+	Country: user.Country,
+	CreatedAt: user.CreatedAt,
+	UpdatedAt: user.UpdatedAt,
+  }, nil
 }
 
 func (s *UserService) GetUserByEmail(ctx context.Context, req dto.GetUserByEmailRequest) (*dto.UserResponse, error) {
-    // TODO: Call repo.GetByEmail with req.Email
-    
-    // TODO: Handle ErrUserNotFound if user doesn't exist
-    
-    // TODO: Convert model.User to dto.UserResponse
-    
-    return nil, nil
+  userEmail := req.Email
+
+  var user model.User
+
+  user, err := s.repo.GetUserByEmail(ctx, userEmail)
+  if err != nil {
+	return nil, ErrUserNotFound
+  }
+
+  return &dto.UserResponse{
+	ID: user.ID,
+	Username: user.Username,
+	Email: user.Email,
+	Address: user.Email,
+	City: user.City,
+	Country: user.Country,
+	CreatedAt: user.CreatedAt,
+	UpdatedAt: user.UpdatedAt,
+  }, nil
 }
 
 func (s *UserService) UpdateUser(ctx context.Context, userID string, req dto.UpdateUserRequest) (*dto.UpdateUserResponse, error) {
-    // TODO: Validate UUID format
-    
-    // TODO: Get existing user with repo.GetByID to ensure exists
-    
-    // TODO: If email is being updated, check it's not taken (excluding current user)
-    
-    // TODO: If username is being updated, check it's not taken (excluding current user)
-    
-    // TODO: If password is being updated, hash it
-    
-    // TODO: Build updated model.User with only changed fields
-    
-    // TODO: Call repo.Update
-    
-    // TODO: Get updated user and convert to response
-    
-    // TODO: Build and return dto.UpdateUserResponse
-    
-    return nil, nil
+  if err := uuid.Validate(userID); err != nil {
+	return nil, ErrInvalidUserID
+  }
+
+  var currentUser model.User
+
+  currentUser, err := s.repo.GetUserByID(ctx, userID)
+  if err != nil {
+	return nil, ErrInvalidUserID
+  }
+
+  if req.Email != nil && *req.Email != currentUser.Email {
+	  exists, err := s.repo.ExistsByEmail(ctx, *req.Email)
+	  if err != nil {
+		return nil, fmt.Errorf("failed to check email existence: %w", err)
+	  }
+	  if exists {
+		return nil, ErrEmailAlreadyExists
+	  }
+  }
+
+  if req.Username != nil && *req.Username != currentUser.Username {
+	  exists, err := s.repo.ExistsByUsername(ctx, *req.Username)
+	  if exists {
+		return nil, ErrUsernameAlreadyExists
+	  }
+  }
+
+  if req.Password != nil {
+	hashedPass, err := bcrypt.GenerateFromPassword(*req.Password, 12)
+	if err != nil {
+	  return nil, fmt.Errorf("Failed to hash password: %w", err)
+	}
+  }
+
+  updates := make(map[string]interface{})
+  if req.Username != nil {
+	updates["username"] = *req.Username
+  }
+  if req.Email != nil {
+	updates["email"] = *req.Email
+  }
+  if req.Password != nil {
+	hashedPass, err := bcrypt.GenerateFromPassword([]byte(*req.Password), 12)
+	if err != nil {
+	  return nil, fmt.Errorf("failed to hash password: %w", err)
+	}
+	updates["password"] = string(hashedPass)
+  }
+  if req.Address != nil {
+	updates["address"] = *req.Address
+  }
+  if req.City != nil {
+	updates["city"] = *req.City
+  }
+  if req.Country != nil {
+	updates["country"] = *req.Country
+  }
+
+  updatedUser, err := s.repo.Update(ctx, userID, updates)
+  if err != nil {
+	return nil, fmt.Errorf("failed to update user: %w", err)
+  }
+
+  return &dto.UpdateUserResponse{
+	User: s.modelToResponse(updatedUser),
+	Message: "User updated successfully!",
+  }, nil
 }
 
 func (s *UserService) DeleteUser(ctx context.Context, req dto.DeleteUserRequest) (*dto.DeleteUserResponse, error) {
-    // TODO: Validate UUID format
-    
-    // TODO: Check if user exists with repo.GetByID
-    
-    // TODO: Call repo.Delete (soft delete ideally)
-    
-    // TODO: Build and return dto.DeleteUserResponse with deletion timestamp
-    
-    return nil, nil
+  if err := uuid.Validate(req.ID); err != nil {
+	return nil, ErrInvalidUserID
+  }
+
+  userID := req.ID
+
+  userExists, err := s.repo.GetUserByID(ctx, userID)
+  if err != nil {
+	return nil, ErrInvalidUserID
+  }
+
+  s.repo.Delete(ctx, userID)
+
+  return &dto.DeleteUserResponse{
+	ID: userID,
+	Message: "User deleted succesfully!",
+	DeletedAt: time.Now()
+  }, nil
 }
 
-// Helpers
+// Helper
 
 func (s *UserService) modelToResponse(user *model.User) *dto.UserResponse {
   return &dto.UserResponse{
-    ID:        user.ID,
-    Username:  user.Username,
-    Email:     user.Email,
-    Address:   user.Address,
-    City:      user.City,
-    Country:   user.Country,
-    CreatedAt: user.CreatedAt,
+	ID:        user.ID,
+	Username:  user.Username,
+	Email:     user.Email,
+	Address:   user.Address,
+	City:      user.City,
+	Country:   user.Country,
+	CreatedAt: user.CreatedAt,
 	UpdatedAt: user.UpdatedAt,
   }
 
   return nil
 }
 
-func generateUUID() string {
-    // TODO: Implement UUID generation (use google/uuid library)
-    return ""
-}
-
-func hashPassword(password string) (string, error) {
-    // TODO: Wrapper for bcrypt.GenerateFromPassword with your cost setting
-    return "", nil
-}
-
-func comparePasswords(hashedPassword, password string) error {
-    // TODO: Wrapper for bcrypt.CompareHashAndPassword
-    return nil
-}
