@@ -49,8 +49,8 @@ func (r *UserRepository) CreateUserAtomic(ctx context.Context, user *model.User)
 
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*model.User, error) {
   var user model.User
-  err := r.db.QueryRow(ctx, "SELECT id, email, username, address, city, country, created_at, updated_at FROM users WHERE id = $1 AND deleted_at IS NULL", id).Scan(
-  &user.ID, &user.Email, &user.Username, &user.Address, &user.City, &user.Country, &user.CreatedAt, &user.UpdatedAt)
+  err := r.db.QueryRow(ctx, "SELECT id, email, password, username, address, city, country, created_at, updated_at FROM users WHERE id = $1 AND deleted_at IS NULL", id).Scan(
+  &user.ID, &user.Email, &user.Password, &user.Username, &user.Address, &user.City, &user.Country, &user.CreatedAt, &user.UpdatedAt)
 
   if err != nil {
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -65,8 +65,8 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*model.User, e
 
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*model.User, error) {
   var user model.User
-  err := r.db.QueryRow(ctx, "SELECT id, email, username, address, city, country, created_at, updated_at FROM users WHERE email = $1 AND deleted_at IS NULL", email).Scan(
-  &user.ID, &user.Email, &user.Username, &user.Address, &user.City, &user.Country, &user.CreatedAt, &user.UpdatedAt)
+  err := r.db.QueryRow(ctx, "SELECT id, email, password, username, address, city, country, created_at, updated_at FROM users WHERE email = $1 AND deleted_at IS NULL", email).Scan(
+  &user.ID, &user.Email, &user.Username, &user.Password, &user.Address, &user.City, &user.Country, &user.CreatedAt, &user.UpdatedAt)
 
   if err != nil {
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -148,7 +148,7 @@ func (r *UserRepository) ExistsByUsername(ctx context.Context, username string) 
   var exists bool
   err := r.db.QueryRow(ctx, 
 	"SELECT EXISTS(SELECT 1 FROM users WHERE email = $1 AND deleted_at IS NULL)", 
-	email,
+	username,
   ).Scan(&exists)
 
   if err != nil {

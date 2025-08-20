@@ -8,12 +8,12 @@ import (
 
   "github.com/F-Dupraz/ecommerce-with-go/dto"
   "github.com/F-Dupraz/ecommerce-with-go/model"
+  "github.com/F-Dupraz/ecommerce-with-go/repository"
 
   "golang.org/x/crypto/bcrypt"
   "github.com/google/uuid"
 )
 
-// Custom errors para el dominio
 var (
   ErrUserNotFound = errors.New("user not found")
   ErrEmailAlreadyExists = errors.New("email already exists")
@@ -22,7 +22,6 @@ var (
   ErrInvalidUserID = errors.New("invalid user id")
 )
 
-// Repository interface - contrato con la capa de datos
 type UserRepository interface {
   CreateUserAtomic(ctx context.Context, user *model.User) error
   GetByID(ctx context.Context, id string) (*model.User, error)
@@ -44,7 +43,7 @@ func NewUserService(repo UserRepository) *UserService {
 }
 
 func (s *UserService) CreateUser(ctx context.Context, req dto.CreateUserRequest) (*dto.CreateUserResponse, error) {
-  hashedPass, err := bcrypt.GenerateFromPassword(req.Password, 12)
+  hashedPass, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
   if err != nil {
 	return nil, fmt.Errorf("Failed to hash password: %w", err)
   }
@@ -81,15 +80,11 @@ func (s *UserService) CreateUser(ctx context.Context, req dto.CreateUserRequest)
 }
 
 func (s *UserService) GetUserByID(ctx context.Context, req dto.GetUserByIDRequest) (*dto.UserResponse, error) {
-  if err := uuid.Validate(userID); err != nil {
+  if err := uuid.Validate(req.ID); err != nil {
 	return nil, ErrInvalidUserID
   }
 
-  serId := req.ID
-
-  var user model.User
-
-  user, err := s.repo.GetUserByID(ctx, userID)
+  user, err := s.repo.GetUserByID(ctx, req.ID)
   if err != nil {
 	return nil, ErrInvalidUserID
   }
@@ -157,13 +152,6 @@ func (s *UserService) UpdateUser(ctx context.Context, userID string, req dto.Upd
 	  }
   }
 
-  if req.Password != nil {
-	hashedPass, err := bcrypt.GenerateFromPassword(*req.Password, 12)
-	if err != nil {
-	  return nil, fmt.Errorf("Failed to hash password: %w", err)
-	}
-  }
-
   updates := make(map[string]interface{})
   if req.Username != nil {
 	updates["username"] = *req.Username
@@ -211,12 +199,18 @@ func (s *UserService) DeleteUser(ctx context.Context, req dto.DeleteUserRequest)
 	return nil, ErrInvalidUserID
   }
 
-  s.repo.Delete(ctx, userID)
+  deletedAt, err := s.repo.Delete(ctx, userID)
+  if err != nil {
+	if errors.Is(err, repository.ErrUserNotFound) {
+	  return nil, ErrUserNotFound
+	}
+	return nil, fmt.Errorf("failed to delete user: %w", err)
+  }
 
   return &dto.DeleteUserResponse{
 	ID: userID,
 	Message: "User deleted succesfully!",
-	DeletedAt: time.Now()
+	DeletedAt: deletedAt
   }, nil
 }
 
@@ -233,7 +227,5 @@ func (s *UserService) modelToResponse(user *model.User) *dto.UserResponse {
 	CreatedAt: user.CreatedAt,
 	UpdatedAt: user.UpdatedAt,
   }
-
-  return nil
 }
 
