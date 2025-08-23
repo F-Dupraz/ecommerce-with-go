@@ -33,13 +33,13 @@ type UserRepository interface {
 }
 
 type UserService struct {
-    repo UserRepository
+  repo UserRepository
 }
 
 func NewUserService(repo UserRepository) *UserService {
-    return &UserService{
-        repo: repo,
-    }
+  return &UserService{
+    repo: repo,
+  }
 }
 
 func (s *UserService) CreateUser(ctx context.Context, req dto.CreateUserRequest) (*dto.CreateUserResponse, error) {
