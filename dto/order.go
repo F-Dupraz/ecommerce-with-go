@@ -56,13 +56,6 @@ type ListOrdersRequest struct {
   SortOrder string `query:"sort_order" validate:"omitempty,oneof=asc desc"`
 }
 
-type ListUserOrdersRequest struct {
-  UserID    string             `param:"user_id" validate:"required,uuid"`
-  Status    *model.OrderStatus `query:"status" validate:"omitempty,oneof=pending paid processing shipped delivered cancelled refunded failed"`
-  Limit     int                `query:"limit" validate:"omitempty,min=1,max=50"`
-  Offset    int                `query:"offset" validate:"omitempty,gte=0"`
-}
-
 type GetOrderByIDRequest struct {
   ID            string `param:"id" validate:"required,uuid"`
   IncludeItems  bool   `query:"include_items"`
