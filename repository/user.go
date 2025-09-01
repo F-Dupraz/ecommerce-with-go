@@ -41,7 +41,7 @@ func (r *UserRepository) CreateUserAtomic(ctx context.Context, user *model.User)
   ).Scan(&user.CreatedAt, &user.UpdatedAt)
 
   if err != nil {
-	return r.translateError(err)  // translateError ya maneja los duplicados
+	return r.translateError(err)
   }
 
   return nil

@@ -4,12 +4,20 @@ import (
   "time"
 )
 
+type UserRole string
+
+const (
+	Admin UserRole = "admin"
+	Customer UserRole = "customer"
+)
+
 type User struct {
     ID        string     `db:"id"`
     Username  string     `db:"username"`
     Email     string     `db:"email"`
     Password  string     `db:"password" json:"-"`
-    Address   string     `db:"address"`
+	Role      UserRole   `db:"role"`
+	Address   string     `db:"address"`
     City      string     `db:"city"`
     Country   string     `db:"country"`
     CreatedAt time.Time  `db:"created_at"`
