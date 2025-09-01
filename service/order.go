@@ -21,7 +21,7 @@ type OrderService struct {
 }
 
 func NewOrderService(repo OrderRepository) *OrderService {
-  return &OrderRepository{
+  return &OrderService{
 	repo: repo,
   }
 }

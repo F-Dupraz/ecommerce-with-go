@@ -16,6 +16,12 @@ import (
   "github.com/F-Dupraz/ecommerce-with-go/model"
 )
 
+type AuthUser struct {
+    ID    string
+    Email string
+    Role  string
+}
+
 type OrderService interface {
     CreateOrder(ctx context.Context, req *dto.CreateOrderRequest) (*dto.CreateOrderResponse, error)
     ListOrders(ctx context.Context, req dto.ListOrdersRequest) (*dto.ListOrdersResponse, error)
@@ -287,9 +293,9 @@ func (o *OrderHandler) DeleteOrder(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-	var req dto.CanclerOrderRequest
+	var req dto.CancelOrderRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&cancelReq); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		o.respondWithError(w, http.StatusBadRequest, "Invalid request body", nil)
 		return
 	}

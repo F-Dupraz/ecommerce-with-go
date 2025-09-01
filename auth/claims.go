@@ -1,7 +1,9 @@
 package auth
 
 import (
-    "github.com/F-Dupraz/ecommerce-with-go/model"
+	"time"
+
+	"github.com/F-Dupraz/ecommerce-with-go/model"
 
 	"github.com/golang-jwt/jwt/v5"
 )

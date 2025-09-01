@@ -2,6 +2,13 @@ package dto
 
 import "time"
 
+type UserInfo struct {
+    ID    string `json:"id"`
+    Email string `json:"email"`
+    Name  string `json:"name,omitempty"`
+    Role  string `json:"role"`
+}
+
 type LoginRequest struct {
     Email    string `json:"email" validate:"required,email"`
     Password string `json:"password" validate:"required,min=8"`

@@ -1,7 +1,11 @@
 package middleware
 
 import (
-    "github.com/F-Fupraz/ecommerce-with-go/auth"
+    "context"
+    "net/http"
+    "strings"
+
+	"github.com/F-Fupraz/ecommerce-with-go/auth"
 )
 
 type AuthMiddleware struct {

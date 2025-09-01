@@ -212,7 +212,7 @@ func (p *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
-  prod_id := chi.URLParam(r, "id")
+  prodID := chi.URLParam(r, "id")
 
   var req dto.UpdateProductRequest
 
@@ -222,7 +222,7 @@ func (p *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
   }
 
   if err := p.validator.Struct(req); err != nil {
-	validatorErrors := dto.FormatValidationErrors(err)
+	validationErrors := dto.FormatValidationErrors(err)
 	p.respondWithError(w, http.StatusUnprocessableEntity, "Validation failed!", validationErrors)
 	return
   }

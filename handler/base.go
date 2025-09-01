@@ -14,7 +14,7 @@ type BaseHandler struct {
   validator *validator.Validate
 }
 
-func (b *BaseHandler) respondWithError(w http.ResponseWriter, statusCode int, message string, details map[string]string = 0) {
+func (b *BaseHandler) respondWithError(w http.ResponseWriter, statusCode int, message string, details map[string]string) {
   w.Header().Set("Content-Type", "application/json")
   w.WriteHeader(statusCode)
   json.NewEncoder(w).Encode(dto.ErrorResponse{

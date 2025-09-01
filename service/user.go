@@ -80,11 +80,11 @@ func (s *UserService) CreateUser(ctx context.Context, req dto.CreateUserRequest)
 }
 
 func (s *UserService) GetUserByID(ctx context.Context, req dto.GetUserByIDRequest) (*dto.UserResponse, error) {
-  if err := uuid.Validate(req.ID); err != nil {
+  if err := uuid.Parse(req.ID); err != nil {
 	return nil, ErrInvalidUserID
   }
 
-  user, err := s.repo.GetUserByID(ctx, req.ID)
+  user, err := s.repo.GetByID(ctx, req.ID)
   if err != nil {
 	return nil, ErrInvalidUserID
   }
@@ -124,7 +124,7 @@ func (s *UserService) GetUserByEmail(ctx context.Context, req dto.GetUserByEmail
 }
 
 func (s *UserService) UpdateUser(ctx context.Context, userID string, req dto.UpdateUserRequest) (*dto.UpdateUserResponse, error) {
-  if err := uuid.Validate(userID); err != nil {
+  if err := uuid.Parse(userID); err != nil {
 	return nil, ErrInvalidUserID
   }
 
@@ -188,7 +188,7 @@ func (s *UserService) UpdateUser(ctx context.Context, userID string, req dto.Upd
 }
 
 func (s *UserService) DeleteUser(ctx context.Context, req dto.DeleteUserRequest) (*dto.DeleteUserResponse, error) {
-  if err := uuid.Validate(req.ID); err != nil {
+  if err := uuid.Parse(req.ID); err != nil {
 	return nil, ErrInvalidUserID
   }
 
