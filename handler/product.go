@@ -1,9 +1,7 @@
 package handler
 
 import (
-  "fmt"
   "context"
-  "strconv"
   "net/http"
   "encoding/json"
 
@@ -39,13 +37,25 @@ func NewProductHandler(productService ProductService, validator *validator.Valid
 
 func (p *ProductHandler) RegisterRoutes(router chi.Router) {
     router.Route("/products", func(r chi.Router) {
-        r.Get("/", p.GetProducts)
-        r.Get("/{id}", p.GetProductByID)
-        r.Get("/category/{id}", p.GetProductByCategory)
-        r.Post("/", p.CreateProduct)
-        r.Put("/{id}", p.UpdateProduct)
-        r.Put("/{id}/stock", p.UpdateProductStock)
-        r.Delete("/{id}", p.DeleteProduct)
+		r.Use(authMiddleware.Authenticate)
+
+		r.Group(func(r chi.Router) {
+			r.Use(authMiddleware.RequireAuth)
+
+			r.Get("/", p.GetProducts)
+			r.Get("/{id}", p.GetProductByID)
+			r.Get("/category/{id}", p.GetProductByCategory)
+		})
+	
+		r.Group(func(r chi.Router) {
+			r.Use(authMiddleware.RequireAuth)
+			r.Use(authMiddleware.RequireAdmin)
+
+			r.Post("/", p.CreateProduct)
+			r.Put("/{id}", p.UpdateProduct)
+			r.Put("/{id}/stock", p.UpdateProductStock)
+			r.Delete("/{id}", p.DeleteProduct)
+		})		
     })
 }
 
@@ -164,22 +174,21 @@ func (p *ProductHandler) GetProductByCategory(w http.ResponseWriter, r *http.Req
 
 func (p *ProductHandler) GetProductByID(w http.ResponseWriter, r *http.Request) {
     prodID := chi.URLParam(r, "id")
-    if prodID == "" {
-        p.respondWithError(w, http.StatusBadRequest, "Product ID is required", nil)
-        return
-    }
     
     response, err := p.productService.GetProductByID(r.Context(), prodID)
     if err != nil {
-        if errors.Is(err, ErrProductNotFound) {
+        switch {
+        case errors.Is(err, service.ErrInvalidID):
+            p.respondWithError(w, http.StatusBadRequest, "Invalid product ID format", nil)
+        case errors.Is(err, service.ErrProductNotFound):
             p.respondWithError(w, http.StatusNotFound, "Product not found", nil)
-            return
+        default:
+            p.respondWithError(w, http.StatusInternalServerError, "Internal server error", nil)
         }
-        p.respondWithError(w, http.StatusInternalServerError, "Failed to get product", nil)
         return
     }
     
-    p.respondWithSuccess(w, http.StatusOK, response)
+	p.respondWithSuccess(w, http.StatusOK, response)
 }
 
 func (p *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
@@ -204,10 +213,17 @@ func (p *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
     
     response, err := p.productService.CreateProduct(r.Context(), &req)
     if err != nil {
-        p.respondWithError(w, http.StatusInternalServerError, "Failed to create product", nil)
+        switch {
+        case errors.Is(err, service.ErrInvalidPrice):
+            p.respondWithError(w, http.StatusBadRequest, "Price must be greater than cost price", nil)
+        case errors.Is(err, service.ErrDuplicateSKU):
+            p.respondWithError(w, http.StatusConflict, "Product with this SKU already exists", nil)
+        default:
+            p.respondWithError(w, http.StatusInternalServerError, "Failed to create product", nil)
+        }
         return
     }
-    
+
     p.respondWithSuccess(w, http.StatusCreated, response)
 }
 
@@ -227,10 +243,21 @@ func (p *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 	return
   }
 
-  response, err := p.productService.UpdateProduct(r.Context(), prodID, &req)
+  response, err := p.productService.UpdateProductStock(r.Context(), prodID, &req)
   if err != nil {
-	p.respondWithError(w, http.StatusInternalServerError, "Failed to create user", nil)
-	return
+    switch {
+      case errors.Is(err, service.ErrInvalidID):
+        p.respondWithError(w, http.StatusBadRequest, "Invalid product ID", nil)
+      case errors.Is(err, service.ErrProductNotFound):
+        p.respondWithError(w, http.StatusNotFound, "Product not found", nil)
+      case errors.Is(err, service.ErrInsufficientStock):
+        p.respondWithError(w, http.StatusBadRequest, "Insufficient stock available", nil)
+      case errors.Is(err, service.ErrStockBelowReserved):
+        p.respondWithError(w, http.StatusConflict, "Cannot reduce stock below reserved amount", nil)
+      default:
+        p.respondWithError(w, http.StatusInternalServerError, "Failed to update stock", nil)
+      }
+    return
   }
 
   p.respondWithSuccess(w, http.StatusOK, response)
@@ -286,13 +313,16 @@ func (p *ProductHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
     
     err := p.productService.DeleteProduct(r.Context(), prodID)
     if err != nil {
-        if errors.Is(err, ErrProductNotFound) {
+        switch {
+        case errors.Is(err, service.ErrInvalidID):
+            p.respondWithError(w, http.StatusBadRequest, "Invalid product ID", nil)
+        case errors.Is(err, service.ErrProductNotFound):
             p.respondWithError(w, http.StatusNotFound, "Product not found", nil)
-            return
+        default:
+            p.respondWithError(w, http.StatusInternalServerError, "Failed to delete product", nil)
         }
-        p.respondWithError(w, http.StatusInternalServerError, "Failed to delete product", nil)
         return
     }
-    
+
     p.respondWithSuccess(w, http.StatusNoContent, nil)
 }

@@ -79,10 +79,10 @@ type GetProductsByCategoryRequest struct {
   Offset           int    `query:"offset" validate:"omitempty,gte=0"`
 }
 
-type GetRelatedProductsRequest struct {
-  ProductID string `param:"product_id" validate:"required,uuid"`
-  Limit     int    `query:"limit" validate:"omitempty,min=1,max=20"`
-}
+// type GetRelatedProductsRequest struct {
+//   ProductID string `param:"product_id" validate:"required,uuid"`
+//   Limit     int    `query:"limit" validate:"omitempty,min=1,max=20"`
+// }
 
 type DeleteProductRequest struct {
   ID string `param:"id" validate:"required,uuid"`
@@ -91,23 +91,17 @@ type DeleteProductRequest struct {
 // Responses
 
 type ProductResponse struct {
-  ID          string                `json:"id"`
-  SKU         string                `json:"sku"`
-  Name        string                `json:"name"`
-  Description string                `json:"description"`
-  Price       float64               `json:"price"`
-  Stock       int                   `json:"stock"`
-  Available   int                   `json:"available"`
-  CategoryID  string                `json:"category_id"`
-  Category    *CategoryResponse     `json:"category,omitempty"`
-  BrandID     *string               `json:"brand_id,omitempty"`
-  Brand       *BrandResponse        `json:"brand,omitempty"`
-  Weight      float64               `json:"weight"`
-  Status      model.ProductStatus   `json:"status"`
-  Images      []string              `json:"images"`
-  Tags        []string              `json:"tags"`
-  CreatedAt   time.Time             `json:"created_at"`
-  UpdatedAt   time.Time             `json:"updated_at"`
+    ID          string    `json:"id"`
+    SKU         string    `json:"sku"`
+    Name        string    `json:"name"`
+    Description string    `json:"description"`
+    Price       float64   `json:"price"`
+    Stock       int       `json:"stock"`
+    Available   int       `json:"available"`
+    Images      []string  `json:"images"`
+    Tags        []string  `json:"tags"`
+    CreatedAt   time.Time `json:"created_at"`
+    UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type CategoryResponse struct {
@@ -140,7 +134,6 @@ type UpdateProductResponse struct {
 type UpdateProductStockResponse struct {
   ProductID    string `json:"product_id"`
   NewStock     int    `json:"new_stock"`
-  OldStock     int    `json:"old_stock"`
   Message      string `json:"message"`
 }
 
@@ -154,16 +147,13 @@ type ReserveStockResponse struct {
 
 type ListProductsResponse struct {
   Products   []ProductResponse `json:"products"`
-  Total      int               `json:"total"`
   Limit      int               `json:"limit"`
   Offset     int               `json:"offset"`
-  HasMore    bool              `json:"has_more"`
 }
 
 type SearchProductsResponse struct {
   Products   []ProductResponse `json:"products"`
   Query      string            `json:"query"`
-  Total      int               `json:"total"`
   Limit      int               `json:"limit"`
   Offset     int               `json:"offset"`
 }
