@@ -1,46 +1,52 @@
 package handler
 
 import (
+  "strconv"
+  "fmt"
+  "errors"
   "context"
   "net/http"
   "encoding/json"
 
   "github.com/go-chi/chi/v5"
   "github.com/go-playground/validator/v10"
-
+  
+  "github.com/F-Dupraz/ecommerce-with-go/service"
+  "github.com/F-Dupraz/ecommerce-with-go/middleware"
   "github.com/F-Dupraz/ecommerce-with-go/dto"
 )
 
 type ProductService interface {
-    CreateProduct(ctx context.Context, prod *dto.CreateProductRequest) (*dto.CreateProductResponse, error)
-    ListProducts(ctx context.Context, prods dto.ListProductsRequest) (*dto.ListProductsResponse, error)
+	CreateProduct(ctx context.Context, prod *dto.CreateProductRequest) (*dto.CreateProductResponse, error)
+    ListProducts(ctx context.Context, req dto.ListProductsRequest) (*dto.ListProductsResponse, error)
     GetProductByID(ctx context.Context, prodID string) (*dto.ProductResponse, error)
-    GetProductsByCategory(ctx context.Context, categoryID string, limit, offset int) (*dto.ListProductsResponse, error)
-    GetRelatedProducts(ctx context.Context, prodID string, limit int) (*dto.ListProductsResponse, error)
-    SearchProducts(ctx context.Context, query string, filters dto.SearchFilters) (*dto.ListProductsResponse, error)
+    GetProductsByCategory(ctx context.Context, req *dto.GetProductsByCategoryRequest) (*dto.ListProductsResponse, error)
+    SearchProducts(ctx context.Context, req dto.SearchProductsRequest) (*dto.SearchProductsResponse, error)
     UpdateProduct(ctx context.Context, prodID string, prod *dto.UpdateProductRequest) (*dto.UpdateProductResponse, error)
-    UpdateProductStock(ctx context.Context, prodID string, stock *dto.UpdateProductStockRequest) (*dto.UpdateProductStockResponse, error)
+    UpdateProductStock(ctx context.Context, prodID string, req *dto.UpdateProductStockRequest) (*dto.UpdateProductStockResponse, error)
     DeleteProduct(ctx context.Context, prodID string) error
 }
 
 type ProductHandler struct {
   BaseHandler
   productService ProductService
+  authMiddleware *middleware.AuthMiddleware
 }
 
-func NewProductHandler(productService ProductService, validator *validator.Validate) *ProductHandler {
+func NewProductHandler(productService ProductService, authMiddleware *middleware.AuthMiddleware, validator *validator.Validate) *ProductHandler {
   return &ProductHandler{
 	productService: productService,
 	BaseHandler: BaseHandler{validator: validator},
+	authMiddleware: authMiddleware,
   }
 }
 
 func (p *ProductHandler) RegisterRoutes(router chi.Router) {
     router.Route("/products", func(r chi.Router) {
-		r.Use(authMiddleware.Authenticate)
+		r.Use(p.authMiddleware.Authenticate)
 
 		r.Group(func(r chi.Router) {
-			r.Use(authMiddleware.RequireAuth)
+			r.Use(p.authMiddleware.RequireAuth)
 
 			r.Get("/", p.GetProducts)
 			r.Get("/{id}", p.GetProductByID)
@@ -48,14 +54,14 @@ func (p *ProductHandler) RegisterRoutes(router chi.Router) {
 		})
 	
 		r.Group(func(r chi.Router) {
-			r.Use(authMiddleware.RequireAuth)
-			r.Use(authMiddleware.RequireAdmin)
+			r.Use(p.authMiddleware.RequireAuth)
+			r.Use(p.authMiddleware.RequireAdmin)
 
 			r.Post("/", p.CreateProduct)
 			r.Put("/{id}", p.UpdateProduct)
 			r.Put("/{id}/stock", p.UpdateProductStock)
 			r.Delete("/{id}", p.DeleteProduct)
-		})		
+		})
     })
 }
 
@@ -126,9 +132,16 @@ func (p *ProductHandler) GetProducts(w http.ResponseWriter, r *http.Request) {
         return
     }
     
-    response, err := p.productService.ListProducts(r.Context(), req)
+	response, err := p.productService.ListProducts(r.Context(), req)
     if err != nil {
-        p.respondWithError(w, http.StatusInternalServerError, "Failed to get products", nil)
+        switch {
+        case errors.Is(err, service.ErrInvalidID):
+            p.respondWithError(w, http.StatusBadRequest, "Invalid ID format", nil)
+        case errors.Is(err, service.ErrInvalidParams):
+            p.respondWithError(w, http.StatusBadRequest, "Invalid parameters", nil)
+        default:
+            p.respondWithError(w, http.StatusInternalServerError, "Failed to get products", nil)
+        }
         return
     }
     
@@ -163,9 +176,22 @@ func (p *ProductHandler) GetProductByCategory(w http.ResponseWriter, r *http.Req
         offset = parsedOffset
     }
     
-    response, err := p.productService.GetProductsByCategory(r.Context(), categoryID, limit, offset)
+    req := &dto.GetProductsByCategoryRequest{
+        CategoryID: categoryID,
+        Limit: limit,
+        Offset: offset,
+    }
+    
+    response, err := p.productService.GetProductsByCategory(r.Context(), req)
     if err != nil {
-        p.respondWithError(w, http.StatusInternalServerError, "Failed to get products by category", nil)
+        switch {
+        case errors.Is(err, service.ErrInvalidID):
+            p.respondWithError(w, http.StatusBadRequest, "Invalid category ID", nil)
+        case errors.Is(err, service.ErrCategoryNotFound):
+            p.respondWithError(w, http.StatusNotFound, "Category not found", nil)
+        default:
+            p.respondWithError(w, http.StatusInternalServerError, "Failed to get products", nil)
+        }
         return
     }
     
@@ -192,8 +218,7 @@ func (p *ProductHandler) GetProductByID(w http.ResponseWriter, r *http.Request) 
 }
 
 func (p *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
-    user, ok := r.Context().Value("user").(AuthUser)
-    if !ok || user.Role != "admin" {
+    if !middleware.IsAdmin(r.Context()) {
         p.respondWithError(w, http.StatusForbidden, "Admin access required", nil)
         return
     }
@@ -228,10 +253,14 @@ func (p *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
+  if !middleware.IsAdmin(r.Context()) {
+    p.respondWithError(w, http.StatusForbidden, "Admin access required", nil)
+    return
+  }
+
   prodID := chi.URLParam(r, "id")
 
   var req dto.UpdateProductRequest
-
   if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 	p.respondWithError(w, http.StatusBadRequest, "Cannot parse JSON: " + err.Error(), nil)
 	return
@@ -243,20 +272,18 @@ func (p *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 	return
   }
 
-  response, err := p.productService.UpdateProductStock(r.Context(), prodID, &req)
+  response, err := p.productService.UpdateProduct(r.Context(), prodID, &req)  // <-- UpdateProduct, no UpdateProductStock
   if err != nil {
     switch {
-      case errors.Is(err, service.ErrInvalidID):
-        p.respondWithError(w, http.StatusBadRequest, "Invalid product ID", nil)
-      case errors.Is(err, service.ErrProductNotFound):
-        p.respondWithError(w, http.StatusNotFound, "Product not found", nil)
-      case errors.Is(err, service.ErrInsufficientStock):
-        p.respondWithError(w, http.StatusBadRequest, "Insufficient stock available", nil)
-      case errors.Is(err, service.ErrStockBelowReserved):
-        p.respondWithError(w, http.StatusConflict, "Cannot reduce stock below reserved amount", nil)
-      default:
-        p.respondWithError(w, http.StatusInternalServerError, "Failed to update stock", nil)
-      }
+    case errors.Is(err, service.ErrInvalidID):
+       p.respondWithError(w, http.StatusBadRequest, "Invalid product ID", nil)
+    case errors.Is(err, service.ErrProductNotFound):
+      p.respondWithError(w, http.StatusNotFound, "Product not found", nil)
+    case errors.Is(err, service.ErrInvalidPrice):
+      p.respondWithError(w, http.StatusBadRequest, "Price must be greater than cost", nil)
+    default:
+      p.respondWithError(w, http.StatusInternalServerError, "Failed to update product", nil)
+    }
     return
   }
 
@@ -264,8 +291,7 @@ func (p *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *ProductHandler) UpdateProductStock(w http.ResponseWriter, r *http.Request) {
-    user, ok := r.Context().Value("user").(AuthUser)
-    if !ok || user.Role != "admin" {
+    if !middleware.IsAdmin(r.Context()) {
         p.respondWithError(w, http.StatusForbidden, "Admin access required", nil)
         return
     }
@@ -291,7 +317,18 @@ func (p *ProductHandler) UpdateProductStock(w http.ResponseWriter, r *http.Reque
     
     response, err := p.productService.UpdateProductStock(r.Context(), prodID, &req)
     if err != nil {
-        p.respondWithError(w, http.StatusInternalServerError, "Failed to update product stock", nil)
+        switch {
+        case errors.Is(err, service.ErrInvalidID):
+            p.respondWithError(w, http.StatusBadRequest, "Invalid product ID", nil)
+        case errors.Is(err, service.ErrProductNotFound):
+            p.respondWithError(w, http.StatusNotFound, "Product not found", nil)
+        case errors.Is(err, service.ErrInsufficientStock):
+            p.respondWithError(w, http.StatusBadRequest, "Insufficient stock available", nil)
+        case errors.Is(err, service.ErrStockBelowReserved):
+            p.respondWithError(w, http.StatusConflict, "Cannot reduce stock below reserved amount", nil)
+        default:
+            p.respondWithError(w, http.StatusInternalServerError, "Failed to update stock", nil)
+        }
         return
     }
     
@@ -299,8 +336,7 @@ func (p *ProductHandler) UpdateProductStock(w http.ResponseWriter, r *http.Reque
 }
 
 func (p *ProductHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
-    user, ok := r.Context().Value("user").(AuthUser)
-    if !ok || user.Role != "admin" {
+    if !middleware.IsAdmin(r.Context()) {
         p.respondWithError(w, http.StatusForbidden, "Admin access required", nil)
         return
     }

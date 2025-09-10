@@ -5,7 +5,7 @@ import (
     "net/http"
     "strings"
 
-	"github.com/F-Fupraz/ecommerce-with-go/auth"
+	"github.com/F-Dupraz/ecommerce-with-go/auth"
 )
 
 type AuthMiddleware struct {
